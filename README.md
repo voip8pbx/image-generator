@@ -1,20 +1,61 @@
-# ImageGeneration
+# Satendra Image Generator Chat
 
-A React + Vite project for image generation.
+A powerful AI-powered image generation and editing application built with React, Vite, and Google's Gemini AI.
 
-## About
+## 🌟 Features
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+- **Text-to-Image Generation**: Generate stunning images from text descriptions using the Gemini 2.5 Flash model.
+- **Image Editing**: Upload an existing image and describe changes to edit or modify it.
+- **Voice Input**: Integrated speech recognition to dictate your prompts for a hands-free experience.
+- **Modern UI**: Sleek dark mode interface with "Antigravity" particle background effects, glassmorphism design, and responsive layout.
+- **Real-time Chat Interface**: Interactive chat-style experience to track your generation history.
 
-Currently, two official plugins are available:
+## 🚀 Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Frontend Framework**: [React](https://react.dev/)
+- **Build Tool**: [Vite](https://vitejs.dev/)
+- **Styling**: [TailwindCSS](https://tailwindcss.com/)
+- **AI Model**: [Google Gemini AI](https://ai.google.dev/) (`@google/genai`)
+- **Icons**: [React Icons](https://react-icons.github.io/react-icons/)
+- **Animations**: Custom particle effects using HTML5 Canvas (`Antigravity` component)
 
-## React Compiler
+## 🛠️ Installation & Setup
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd my-project
+   ```
 
-## Expanding the ESLint configuration
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+3. **Configure Environment Variables**
+   Create a `.env` file in the root directory and add your Google Gemini API key:
+   ```env
+   VITE_GEMINI_API_KEY=your_api_key_here
+   ```
+   > **Note**: You can get an API key from [Google AI Studio](https://aistudio.google.com/).
+
+4. **Run the Development Server**
+   ```bash
+   npm run dev
+   ```
+
+## 📖 Usage
+
+1. **Generate Image**: Type a description in the input box (e.g., "A futuristic city under a purple sky") and hit Send.
+2. **Edit Image**: Click the paperclip icon to attach an image, then type instructions (e.g., "Make the sky blue") and send.
+3. **Voice Command**: Click the microphone icon and speak your prompt. Click again to stop or wait for auto-detection.
+
+## 📦 Scripts
+
+- `npm run dev`: Start the development server.
+- `npm run build`: Build the app for production.
+- `npm run lint`: Lint the codebase.
+- `npm run preview`: Preview the production build locally.
+
+---
+*Built with ❤️ using React & Gemini AI*
