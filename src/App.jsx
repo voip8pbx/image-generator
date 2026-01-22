@@ -1,53 +1,220 @@
-import { useState } from "react";
-import { FaMicrophone, FaPaperclip } from "react-icons/fa";
+import { useState, useRef, useEffect } from "react";
+import { FaMicrophone, FaPaperclip, FaTimes } from "react-icons/fa";
 import { IoSend } from "react-icons/io5";
-import Spinner from "./components/Spinner"; 
-import Antigravity from './components/uicompo/AntiGravity';
+import { GoogleGenAI } from "@google/genai";
+import Spinner from "./components/Spinner";
+import Antigravity from "./components/uicompo/AntiGravity";
 
 export default function GeminiTextToImage() {
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      role: "assistant",
+      text: "Hello! I'm your AI image generation assistant. Describe any image you'd like me to create, or upload an image and I'll help you edit it!",
+      image: null,
+      timestamp: new Date(),
+    },
+  ]);
   const [prompt, setPrompt] = useState("");
-  const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [attachedImage, setAttachedImage] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  // Initialize SpeechRecognition
+  useEffect(() => {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = "en-US";
+
+      recognitionRef.current.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onresult = (event) => {
+        let interimTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            setPrompt((prev) => prev + (prev ? " " : "") + transcript);
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+      };
+
+      recognitionRef.current.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+    }
+  }, []);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleImageAttach = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check if file is an image
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setAttachedImage({
+        data: event.target?.result,
+        name: file.name,
+        mimeType: file.type,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeAttachedImage = () => {
+    setAttachedImage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const toggleMicrophone = () => {
+    if (!recognitionRef.current) {
+      alert("Speech Recognition is not supported in your browser");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current.start();
+    }
+  };
 
   const generateImage = async () => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() && !attachedImage) return;
 
+    // Add user message to chat
+    const userMessage = {
+      id: messages.length + 1,
+      role: "user",
+      text: prompt,
+      image: attachedImage?.data || null,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setPrompt("");
+    removeAttachedImage();
     setLoading(true);
-    setError(null);
-    setImage(null);
 
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            instances: [{ prompt }],
-            parameters: { sampleCount: 1 }
-          })
+      const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!API_KEY) throw new Error("API key is missing");
+
+      const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+      // Build the prompt with image if attached
+      let contents = [];
+
+      if (attachedImage) {
+        // If there's an attached image, add it first
+        const base64Image = attachedImage.data.split(",")[1]; // Remove data:image/png;base64, prefix
+        contents.push({
+          inlineData: {
+            mimeType: attachedImage.mimeType,
+            data: base64Image,
+          },
+        });
+      }
+
+      // Add the text prompt
+      if (prompt.trim()) {
+        contents.push({ text: prompt });
+      } else if (attachedImage) {
+        // If only image is attached, use a default prompt
+        contents.push({
+          text: "Edit or modify this image as requested",
+        });
+      }
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: contents,
+      });
+
+      console.log("Generation response:", response);
+
+      // Extract image data and text from response
+      let imageData = null;
+      let textResponse = "";
+
+      const candidates = response.candidates || [];
+      for (const candidate of candidates) {
+        for (const part of candidate.content.parts) {
+          if (part.inlineData) {
+            imageData = part.inlineData.data;
+          } else if (part.text) {
+            textResponse += part.text;
+          }
         }
-      );
+      }
 
-      const data = await res.json();
-      const base64Image = data.predictions?.[0]?.bytesBase64Encoded;
+      if (!imageData && !textResponse) {
+        throw new Error("No response from model");
+      }
 
-      if (!base64Image) throw new Error("No image returned");
+      // Add assistant response to chat
+      const assistantMessage = {
+        id: messages.length + 2,
+        role: "assistant",
+        text: textResponse || "Image generated successfully!",
+        image: imageData ? `data:image/png;base64,${imageData}` : null,
+        timestamp: new Date(),
+      };
 
-      setImage(`data:image/png;base64,${base64Image}`);
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
-      setError(err.message || "Something went wrong");
+      console.error("Error generating image:", err);
+
+      // Add error message to chat
+      const errorMessage = {
+        id: messages.length + 2,
+        role: "assistant",
+        text: `Error: ${err.message || "Something went wrong"}`,
+        image: null,
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="relative min-h-screen bg-black overflow-hidden text-white">
-
+    <div className="relative min-h-screen bg-black overflow-hidden text-white flex flex-col">
       {/* Background */}
-      <div className="absolute inset-0 opacity-80">
+      <div className="absolute inset-0 opacity-40">
         <Antigravity
           count={300}
           magnetRadius={6}
@@ -63,66 +230,147 @@ export default function GeminiTextToImage() {
         />
       </div>
 
-      <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/70 to-black/90" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/85 to-black/90" />
 
-      <div className="relative z-10 flex flex-col min-h-screen">
+      {/* Header */}
+      <div className="relative z-10 border-b border-blue-500/20 bg-black/70 backdrop-blur-xl p-4">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+            Satendra Image Generator Chat
+          </h1>
+          <p className="text-blue-400/60 text-sm mt-1">
+            Chat with AI to generate or edit images
+          </p>
+        </div>
+      </div>
 
-        {/* Image Area */}
-        <div className="flex-1 flex items-center justify-center px-4">
+      {/* Chat Messages */}
+      <div className="relative z-10 flex-1 overflow-y-auto max-w-4xl mx-auto w-full px-4 py-6">
+        <div className="space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${
+                message.role === "user" ? "justify-end" : "justify-start"
+              }`}
+            >
+              <div
+                className={`max-w-md lg:max-w-xl ${
+                  message.role === "user"
+                    ? "bg-blue-600/40 border border-blue-500/50"
+                    : "bg-black/40 border border-blue-500/30"
+                } rounded-2xl px-4 py-3 backdrop-blur-sm`}
+              >
+                {message.image && (
+                  <img
+                    src={message.image}
+                    alt="Chat"
+                    className="rounded-xl max-h-80 w-full object-cover shadow-lg mb-2"
+                  />
+                )}
+                {message.text && (
+                  <p className="text-white text-sm">{message.text}</p>
+                )}
+                <p className="text-blue-400/50 text-xs mt-2">
+                  {message.timestamp.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+            </div>
+          ))}
+
           {loading && (
-            <div className="p-6 rounded-full bg-blue-500/10 shadow-[0_0_40px_rgba(59,130,246,0.8)]">
-              <Spinner />
+            <div className="flex justify-start">
+              <div className="bg-black/40 border border-blue-500/30 rounded-2xl px-4 py-3 backdrop-blur-sm">
+                <div className="p-4">
+                  <Spinner />
+                </div>
+              </div>
             </div>
           )}
 
-          {!loading && error && <p className="text-red-400">{error}</p>}
-
-          {!loading && image && (
-            <img
-              src={image}
-              alt="Generated"
-              className="max-h-[420px] rounded-2xl shadow-[0_0_40px_rgba(59,130,246,0.6)]"
-            />
-          )}
-
-          {!loading && !image && !error && (
-            <p className="text-blue-400/60">Your generated image will appear here</p>
-          )}
+          <div ref={messagesEndRef} />
         </div>
+      </div>
 
-        {/* Bottom Input Bar */}
-        <div className="sticky bottom-0 w-full p-4 bg-black/70 backdrop-blur-xl border-t border-blue-500/20">
-          <div className="max-w-3xl mx-auto flex items-center gap-3 bg-black/80 border border-blue-500/30 rounded-2xl px-4 py-3 shadow-[0_0_20px_rgba(59,130,246,0.3)]">
-
-            {/* Attach */}
-            <button className="text-blue-400 hover:text-blue-300 transition">
-              <FaPaperclip size={18} />
-            </button>
-
-            {/* Input */}
-            <input
-              type="text"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe the image you want to generate..."
-              className="flex-1 bg-transparent outline-none text-blue-100 placeholder-blue-400"
-              onKeyDown={(e) => e.key === "Enter" && generateImage()}
+      {/* Attached Image Preview */}
+      {attachedImage && (
+        <div className="relative z-10 max-w-4xl mx-auto w-full px-4 pb-4">
+          <div className="relative inline-block">
+            <img
+              src={attachedImage.data}
+              alt="Attached"
+              className="rounded-lg max-h-64 border border-blue-500/50 bg-black/40"
             />
-
-            {/* Mic */}
-            <button className="text-blue-400 hover:text-blue-300 transition">
-              <FaMicrophone size={18} />
-            </button>
-
-            {/* Send Icon */}
             <button
-              onClick={generateImage}
-              className="ml-2 p-2 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-black hover:scale-110 transition shadow-[0_0_15px_rgba(59,130,246,0.6)]"
+              onClick={removeAttachedImage}
+              className="absolute top-2 right-2 p-2 rounded-full bg-red-600 hover:bg-red-700 transition"
             >
-              <IoSend size={18} />
+              <FaTimes size={16} />
             </button>
-
           </div>
+        </div>
+      )}
+
+      {/* Input Bar */}
+      <div className="relative z-10 sticky bottom-0 w-full p-4 bg-black/70 backdrop-blur-xl border-t border-blue-500/20">
+        <div className="max-w-4xl mx-auto flex items-center gap-3 bg-black/80 border border-blue-500/30 rounded-2xl px-4 py-3 shadow-[0_0_20px_rgba(59,130,246,0.3)]">
+          {/* Attach */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="text-blue-400 hover:text-blue-300 transition flex-shrink-0"
+            title="Attach image"
+          >
+            <FaPaperclip size={18} />
+          </button>
+
+          {/* Hidden File Input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageAttach}
+            className="hidden"
+          />
+
+          {/* Input */}
+          <input
+            type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder={
+              attachedImage
+                ? "Describe how to edit this image..."
+                : "Describe the image you want to generate..."
+            }
+            className="flex-1 bg-transparent outline-none text-blue-100 placeholder-blue-400/60"
+            onKeyDown={(e) => e.key === "Enter" && !loading && generateImage()}
+            disabled={loading}
+          />
+
+          {/* Mic */}
+          <button
+            onClick={toggleMicrophone}
+            className={`transition flex-shrink-0 ${
+              isListening
+                ? "text-red-500 animate-pulse"
+                : "text-blue-400 hover:text-blue-300"
+            }`}
+            title={isListening ? "Stop recording" : "Start voice input"}
+          >
+            <FaMicrophone size={18} />
+          </button>
+
+          {/* Send Icon */}
+          <button
+            onClick={generateImage}
+            disabled={loading || (!prompt.trim() && !attachedImage)}
+            className="ml-2 p-2 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-black hover:scale-110 transition shadow-[0_0_15px_rgba(59,130,246,0.6)] disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+          >
+            <IoSend size={18} />
+          </button>
         </div>
       </div>
     </div>
