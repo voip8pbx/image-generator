@@ -1,1 +1,33 @@
 @import "tailwindcss";
+@keyframes borderGlow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animated-border {
+  position: relative;
+}
+
+.animated-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 1rem;
+  background: linear-gradient(270deg, #3b82f6, #22d3ee, #3b82f6);
+  background-size: 400% 400%;
+  animation: borderGlow 6s ease infinite;
+  z-index: -1;
+}
+@keyframes softPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(59,130,246,0.5);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(59,130,246,0.9);
+  }
+}
+
+.pulse-glow {
+  animation: softPulse 2.5s ease-in-out infinite;
+}
